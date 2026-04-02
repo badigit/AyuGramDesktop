@@ -123,7 +123,7 @@ jobs:
         run: |
           set OUT=%TBUILD%\%REPO_NAME%\out\Debug
           mkdir artifact
-          move %OUT%\Telegram.exe artifact\
+          move %OUT%\AyuGram.exe artifact\
           move %OUT%\Updater.exe artifact\
 
       - name: Upload artifact.
