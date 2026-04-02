@@ -119,10 +119,15 @@ jobs:
 
           cmake --build ..\out --config Debug --parallel
 
+      - name: Move artifact.
+        run: |
+          set OUT=%TBUILD%\%REPO_NAME%\out\Debug
+          mkdir artifact
+          move %OUT%\Telegram.exe artifact\
+          move %OUT%\Updater.exe artifact\
+
       - name: Upload artifact.
         uses: actions/upload-artifact@v7
         with:
           name: AyuGram-x64
-          path: |
-            ${{ env.TBUILD }}\${{ env.REPO_NAME }}\out\Debug\Telegram.exe
-            ${{ env.TBUILD }}\${{ env.REPO_NAME }}\out\Debug\Updater.exe
+          path: artifact\
