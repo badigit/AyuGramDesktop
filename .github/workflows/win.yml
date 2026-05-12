@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - mods
+      - 'claude/**'
 
 jobs:
 
