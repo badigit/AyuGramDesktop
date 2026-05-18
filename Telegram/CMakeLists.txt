@@ -2141,6 +2141,11 @@ if (WIN32)
         target_link_libraries(Telegram PRIVATE desktop-app::win_directx_helper)
     endif()
 
+    # Qt 6.11.1 uses DnsQueryEx / DnsWriteQuestionToBuffer_W /
+    # DnsExtractRecordsFromMessage_W in qdnslookup_win.cpp but does not
+    # propagate Dnsapi to consumers, so link it explicitly.
+    target_link_libraries(Telegram PRIVATE Dnsapi)
+
     target_link_options(Telegram PRIVATE /PDBPAGESIZE:8192)
 elseif (APPLE)
     if (NOT DESKTOP_APP_USE_PACKAGED)
