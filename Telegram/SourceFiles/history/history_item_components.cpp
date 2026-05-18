@@ -62,7 +62,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QGuiApplication>
 
 // AyuGram includes
-#include "ayu/ayu_settings.h"
 #include "ayu/features/filters/filters_controller.h"
 
 namespace {
@@ -157,6 +156,7 @@ void HistoryMessageVia::resize(int32 availw) const {
 			tr::now,
 			lt_inline_bot,
 			'@' + bot->username());
+		maxWidth = st::msgServiceNameFont->width(text);
 		if (availw < maxWidth) {
 			text = st::msgServiceNameFont->elided(text, availw);
 			width = st::msgServiceNameFont->width(text);
@@ -365,6 +365,8 @@ ReplyFields ReplyFields::clone(not_null<HistoryItem*> parent) const {
 		.messageId = messageId,
 		.topMessageId = topMessageId,
 		.storyId = storyId,
+		.todoItemId = todoItemId,
+		.pollOption = pollOption,
 		.quoteOffset = quoteOffset,
 		.manualQuote = manualQuote,
 		.topicPost = topicPost,
@@ -393,6 +395,7 @@ ReplyFields ReplyFieldsFromMTP(
 			result.topicPost = data.is_forum_topic() ? 1 : 0;
 		}
 		result.todoItemId = data.vtodo_item_id().value_or_empty();
+		result.pollOption = data.vpoll_option().value_or_empty();
 		if (const auto header = data.vreply_from()) {
 			const auto &data = header->data();
 			result.externalPostAuthor
@@ -447,6 +450,8 @@ FullReplyTo ReplyToFromMTP(
 				data.vquote_entities().value_or_empty()),
 		};
 		result.quoteOffset = data.vquote_offset().value_or_empty();
+		result.todoItemId = data.vtodo_item_id().value_or_empty();
+		result.pollOption = data.vpoll_option().value_or_empty();
 		return result;
 	}, [&](const MTPDinputReplyToStory &data) {
 		if (const auto parsed = Data::PeerFromInputMTP(
@@ -527,18 +532,6 @@ void HistoryMessageReply::updateData(
 		&& (asExternal || _fields.manualQuote);
 	_multiline = !_fields.storyId && (asExternal || nonEmptyQuote);
 
-	const auto &settings = AyuSettings::getInstance();
-	const auto author = resolvedMessage
-							? resolvedMessage->from().get()
-							: resolvedStory
-								  ? resolvedStory->peer().get()
-								  : nullptr;
-	const auto blocked = settings.hideFromBlocked()
-		&& author
-		&& author->isUser()
-		&& author->asUser()->isBlocked();
-
-
 	const auto filtered = resolvedMessage &&
 			!resolvedMessage.empty() &&
 			FiltersController::filtered(resolvedMessage.get());
@@ -547,12 +540,12 @@ void HistoryMessageReply::updateData(
 		|| resolvedStory
 		|| ((nonEmptyQuote || _fields.externalMedia)
 			&& (!_fields.messageId || force));
-	_displaying = displaying && !blocked && !filtered ? 1 : 0;
+	_displaying = displaying && !filtered ? 1 : 0;
 
 	const auto unavailable = !resolvedMessage
 		&& !resolvedStory
 		&& ((!_fields.storyId && !_fields.messageId) || force);
-	_unavailable = unavailable && !blocked && !filtered ? 1 : 0;
+	_unavailable = (unavailable || filtered) ? 1 : 0;
 
 	if (force) {
 		if (!_displaying && (_fields.messageId || _fields.storyId)) {
@@ -682,6 +675,11 @@ ReplyMarkupClickHandler::ReplyMarkupClickHandler(
 , _itemId(context)
 , _row(row)
 , _column(column) {
+}
+
+QString ReplyMarkupClickHandler::dragText() const {
+	const auto button = getUrlButton();
+	return button ? QString::fromUtf8(button->data) : QString();
 }
 
 // Copy to clipboard support.
@@ -1013,7 +1011,18 @@ void ReplyKeyboard::paint(
 
 			auto buttonRounding = Ui::BubbleRounding();
 			using Corner = Ui::BubbleCornerRounding;
-			buttonRounding.topLeft = buttonRounding.topRight = Corner::Small;
+			buttonRounding.topLeft = ((!y)
+				&& !x
+				&& !st
+				&& (rounding.topLeft == Corner::Large))
+				? Corner::Large
+				: Corner::Small;
+			buttonRounding.topRight = ((!y)
+				&& (x + 1 == count)
+				&& !st
+				&& (rounding.topRight == Corner::Large))
+				? Corner::Large
+				: Corner::Small;
 			buttonRounding.bottomLeft = ((y + 1 == rowsCount)
 				&& !x
 				&& (rounding.bottomLeft == Corner::Large))

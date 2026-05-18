@@ -101,6 +101,7 @@ const style::InfoTopBar &TopBarStyle(Wrap wrap) {
 			case Type::Link: return tr::lng_media_selected_link;
 			case Type::RoundVoiceFile: return tr::lng_media_selected_audio;
 			case Type::PhotoVideo: return tr::lng_stories_row_count;
+			case Type::Poll: return tr::lng_media_selected_poll;
 			}
 			Unexpected("Type in TopBar::generateSelectedText()");
 		}()(tr::now, lt_count, count, Ui::StringWithNumbers::FromString);
@@ -794,9 +795,11 @@ void WrapWidget::finishShowContent() {
 		std::vector<std::shared_ptr<ContentMemento>> stack;
 		stack.push_back(std::move(contentMemento));
 		const auto sectionMemento = std::make_shared<Memento>(std::move(stack));
+		const auto params = Window::SectionShow(
+			Window::SectionShow::Way::Backward,
+			anim::type::instant);
 
-		showBackFromStackInternal(Window::SectionShow(anim::type::instant));
-		showInternal(sectionMemento.get(), Window::SectionShow(anim::type::instant));
+		showInternal(sectionMemento.get(), params);
 	}, _content->lifetime());
 }
 

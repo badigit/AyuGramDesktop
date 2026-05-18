@@ -16,8 +16,8 @@
 #include "features/translator/ayu_translator.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
+#include "platform/platform_translate_provider.h"
 #include "rpl/combine.h"
-#include "ui/ayu_userpic.h"
 #include "window/window_controller.h"
 
 #include <fstream>
@@ -109,9 +109,28 @@ void GhostModeAccountSettings::setUseScheduledMessages(bool val) {
 	AyuSettings::save();
 }
 
-void GhostModeAccountSettings::setSendWithoutSound(bool val) {
+bool GhostModeAccountSettings::shouldSendWithoutSound() const {
+	switch (_sendWithoutSound.current()) {
+	case SendWithoutSoundOption::Never:
+		return false;
+	case SendWithoutSoundOption::InGhostMode:
+		return isGhostModeActive();
+	case SendWithoutSoundOption::Always:
+		return true;
+	}
+	Unexpected("Value in GhostModeAccountSettings::shouldSendWithoutSound.");
+}
+
+void GhostModeAccountSettings::setSendWithoutSound(
+		SendWithoutSoundOption val) {
 	if (_sendWithoutSound.current() == val) return;
 	_sendWithoutSound = val;
+	AyuSettings::save();
+}
+
+void GhostModeAccountSettings::setSuggestGhostModeBeforeViewingStory(bool val) {
+	if (_suggestGhostModeBeforeViewingStory.current() == val) return;
+	_suggestGhostModeBeforeViewingStory = val;
 	AyuSettings::save();
 }
 
@@ -172,6 +191,7 @@ void to_json(nlohmann::json &j, const GhostModeAccountSettings &s) {
 		{"markReadAfterAction", s._markReadAfterAction.current()},
 		{"useScheduledMessages", s._useScheduledMessages.current()},
 		{"sendWithoutSound", s._sendWithoutSound.current()},
+		{"suggestGhostModeBeforeViewingStory", s._suggestGhostModeBeforeViewingStory.current()},
 		{"sendReadMessagesLocked", s._sendReadMessagesLocked.current()},
 		{"sendReadStoriesLocked", s._sendReadStoriesLocked.current()},
 		{"sendOnlinePacketsLocked", s._sendOnlinePacketsLocked.current()},
@@ -188,7 +208,15 @@ void from_json(const nlohmann::json &j, GhostModeAccountSettings &s) {
 	s._sendOfflinePacketAfterOnline = j.value("sendOfflinePacketAfterOnline", false);
 	s._markReadAfterAction = j.value("markReadAfterAction", true);
 	s._useScheduledMessages = j.value("useScheduledMessages", false);
-	s._sendWithoutSound = j.value("sendWithoutSound", false);
+	const auto sendWithoutSound = j.find("sendWithoutSound");
+	s._sendWithoutSound = (sendWithoutSound == j.end())
+		? SendWithoutSoundOption::Never
+		: sendWithoutSound->is_boolean()
+		? (sendWithoutSound->get<bool>()
+			? SendWithoutSoundOption::Always
+			: SendWithoutSoundOption::Never)
+		: sendWithoutSound->get<SendWithoutSoundOption>();
+	s._suggestGhostModeBeforeViewingStory = j.value("suggestGhostModeBeforeViewingStory", true);
 	s._sendReadMessagesLocked = j.value("sendReadMessagesLocked", false);
 	s._sendReadStoriesLocked = j.value("sendReadStoriesLocked", false);
 	s._sendOnlinePacketsLocked = j.value("sendOnlinePacketsLocked", false);
@@ -211,6 +239,12 @@ void MessageShotSettings::setShowDate(bool val) {
 void MessageShotSettings::setShowReactions(bool val) {
 	if (_showReactions.current() == val) return;
 	_showReactions = val;
+	AyuSettings::save();
+}
+
+void MessageShotSettings::setShowHeaderDecorations(bool val) {
+	if (_showHeaderDecorations.current() == val) return;
+	_showHeaderDecorations = val;
 	AyuSettings::save();
 }
 
@@ -290,6 +324,7 @@ void to_json(nlohmann::json &j, const MessageShotSettings &s) {
 		{"showBackground", s._showBackground.current()},
 		{"showDate", s._showDate.current()},
 		{"showReactions", s._showReactions.current()},
+		{"showHeaderDecorations", s._showHeaderDecorations.current()},
 		{"showColorfulReplies", s._showColorfulReplies.current()},
 		{"revealSpoilers", s._revealSpoilers.current()},
 		{"embeddedThemeType", s._embeddedThemeType.current()},
@@ -306,6 +341,7 @@ void from_json(const nlohmann::json &j, MessageShotSettings &s) {
 	s._showBackground = j.value("showBackground", true);
 	s._showDate = j.value("showDate", false);
 	s._showReactions = j.value("showReactions", false);
+	s._showHeaderDecorations = j.value("showHeaderDecorations", true);
 	s._showColorfulReplies = j.value("showColorfulReplies", true);
 	s._revealSpoilers = j.value("revealSpoilers", true);
 	s._embeddedThemeType = j.value("embeddedThemeType", j.value("themeType", -1));
@@ -453,9 +489,9 @@ void AyuSettings::validate() {
 		}
 	};
 
-	auto validateEnum = [&](auto &var, const auto &defaultVar) {
+	auto validateEnum = [&](auto &var, const auto &defaultVar, int max = 2) {
 		auto intVal = static_cast<int>(var.current());
-		if (intVal < 0 || intVal > 2) {
+		if (intVal < 0 || intVal > max) {
 			var = defaultVar.current();
 			modified = true;
 		}
@@ -471,8 +507,14 @@ void AyuSettings::validate() {
 	validateEnum(_showRepeatMessageInContextMenu, defaults._showRepeatMessageInContextMenu);
 	validateEnum(_showAddFilterInContextMenu, defaults._showAddFilterInContextMenu);
 
-	validateEnum(_translationProvider, defaults._translationProvider);
+	validateEnum(_translationProvider, defaults._translationProvider, 3);
+	if ((_translationProvider.current() == TranslationProvider::Native)
+		&& !Platform::IsTranslateProviderAvailable()) {
+		_translationProvider = defaults._translationProvider.current();
+		modified = true;
+	}
 
+	validateRange(_messageBubbleRadius, 0, 16, defaults._messageBubbleRadius);
 	validateRange(_wideMultiplier, 0.5, 4.0, defaults._wideMultiplier);
 	validateRange(_recentStickersCount, 1, 200, defaults._recentStickersCount);
 	validateRange(_avatarCorners, 0, AyuUiSettings::kMaxAvatarCorners, defaults._avatarCorners);
@@ -571,6 +613,12 @@ void AyuSettings::setCollapseSimilarChannels(bool val) {
 void AyuSettings::setHideSimilarChannels(bool val) {
 	if (_hideSimilarChannels.current() == val) return;
 	_hideSimilarChannels = val;
+	save();
+}
+
+void AyuSettings::setMessageBubbleRadius(int val) {
+	if (_messageBubbleRadius.current() == val) return;
+	_messageBubbleRadius = val;
 	save();
 }
 
@@ -765,6 +813,18 @@ void AyuSettings::setShowAutoDeleteButtonInMessageField(bool val) {
 	save();
 }
 
+void AyuSettings::setShowGiftButtonInMessageField(bool val) {
+	if (_showGiftButtonInMessageField.current() == val) return;
+	_showGiftButtonInMessageField = val;
+	save();
+}
+
+void AyuSettings::setShowAiEditorButtonInMessageField(bool val) {
+	if (_showAiEditorButtonInMessageField.current() == val) return;
+	_showAiEditorButtonInMessageField = val;
+	save();
+}
+
 void AyuSettings::setShowAttachPopup(bool val) {
 	if (_showAttachPopup.current() == val) return;
 	_showAttachPopup = val;
@@ -946,9 +1006,15 @@ void AyuSettings::setVoiceConfirmation(bool val) {
 }
 
 void AyuSettings::setTranslationProvider(TranslationProvider val) {
+	if ((val == TranslationProvider::Native)
+		&& !Platform::IsTranslateProviderAvailable()) {
+		val = TranslationProvider::Telegram;
+	}
 	if (_translationProvider.current() == val) return;
 	_translationProvider = val;
-	Ayu::Translator::TranslateManager::currentInstance()->resetCache();
+	if (const auto manager = Ayu::Translator::TranslateManager::currentInstance()) {
+		manager->resetCache();
+	}
 	save();
 }
 
@@ -985,9 +1051,9 @@ void AyuSettings::setSingleCornerRadius(bool val) {
 }
 
 void to_json(nlohmann::json &j, const AyuSettings &s) {
-	std::map<std::string, GhostModeAccountSettings> ghostAccounts;
+	auto ghostAccounts = nlohmann::json::object();
 	for (const auto &[key, value] : s._ghostAccounts) {
-		ghostAccounts[std::to_string(key)] = std::move(*value);
+		ghostAccounts[std::to_string(key)] = *value;
 	}
 
 	j = nlohmann::json{
@@ -1007,6 +1073,7 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"showOnlyAddedEmojisAndStickers", s._showOnlyAddedEmojisAndStickers.current()},
 		{"collapseSimilarChannels", s._collapseSimilarChannels.current()},
 		{"hideSimilarChannels", s._hideSimilarChannels.current()},
+		{"messageBubbleRadius", s._messageBubbleRadius.current()},
 		{"disableOpenLinkWarning", s._disableOpenLinkWarning.current()},
 		{"wideMultiplier", s._wideMultiplier.current()},
 		{"spoofWebviewAsAndroid", s._spoofWebviewAsAndroid.current()},
@@ -1038,6 +1105,8 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"showEmojiButtonInMessageField", s._showEmojiButtonInMessageField.current()},
 		{"showMicrophoneButtonInMessageField", s._showMicrophoneButtonInMessageField.current()},
 		{"showAutoDeleteButtonInMessageField", s._showAutoDeleteButtonInMessageField.current()},
+		{"showGiftButtonInMessageField", s._showGiftButtonInMessageField.current()},
+		{"showAiEditorButtonInMessageField", s._showAiEditorButtonInMessageField.current()},
 		{"showAttachPopup", s._showAttachPopup.current()},
 		{"showEmojiPopup", s._showEmojiPopup.current()},
 		{"showMyProfileInDrawer", s._showMyProfileInDrawer.current()},
@@ -1104,6 +1173,7 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 	s._showOnlyAddedEmojisAndStickers = j.value("showOnlyAddedEmojisAndStickers", defaults._showOnlyAddedEmojisAndStickers.current());
 	s._collapseSimilarChannels = j.value("collapseSimilarChannels", defaults._collapseSimilarChannels.current());
 	s._hideSimilarChannels = j.value("hideSimilarChannels", defaults._hideSimilarChannels.current());
+	s._messageBubbleRadius = j.value("messageBubbleRadius", defaults._messageBubbleRadius.current());
 	s._disableOpenLinkWarning = j.value("disableOpenLinkWarning", defaults._disableOpenLinkWarning.current());
 	s._wideMultiplier = j.value("wideMultiplier", defaults._wideMultiplier.current());
 	s._spoofWebviewAsAndroid = j.value("spoofWebviewAsAndroid", defaults._spoofWebviewAsAndroid.current());
@@ -1135,6 +1205,8 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 	s._showEmojiButtonInMessageField = j.value("showEmojiButtonInMessageField", defaults._showEmojiButtonInMessageField.current());
 	s._showMicrophoneButtonInMessageField = j.value("showMicrophoneButtonInMessageField", defaults._showMicrophoneButtonInMessageField.current());
 	s._showAutoDeleteButtonInMessageField = j.value("showAutoDeleteButtonInMessageField", defaults._showAutoDeleteButtonInMessageField.current());
+	s._showGiftButtonInMessageField = j.value("showGiftButtonInMessageField", defaults._showGiftButtonInMessageField.current());
+	s._showAiEditorButtonInMessageField = j.value("showAiEditorButtonInMessageField", defaults._showAiEditorButtonInMessageField.current());
 	s._showAttachPopup = j.value("showAttachPopup", defaults._showAttachPopup.current());
 	s._showEmojiPopup = j.value("showEmojiPopup", defaults._showEmojiPopup.current());
 	s._showMyProfileInDrawer = j.value("showMyProfileInDrawer", defaults._showMyProfileInDrawer.current());

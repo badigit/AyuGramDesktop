@@ -226,8 +226,9 @@ void loadPhotoSync(not_null<Main::Session*> session, const std::pair<not_null<Ph
 	}
 }
 
-void sendMessageSync(not_null<Main::Session*> session, Api::MessageToSend &message) {
-	crl::on_main([=, &message]
+void sendMessageSync(not_null<Main::Session*> session, Api::MessageToSend &&message) {
+	const auto action = message.action;
+	crl::on_main([=, message = std::move(message)]() mutable
 	{
 		// we cannot send events to objects
 		// owned by a different thread
@@ -237,7 +238,7 @@ void sendMessageSync(not_null<Main::Session*> session, Api::MessageToSend &messa
 	});
 
 
-	waitForMsgSync(session, message.action);
+	waitForMsgSync(session, action);
 }
 
 void waitForMsgSync(not_null<Main::Session*> session, const Api::SendAction &action) {
@@ -272,17 +273,24 @@ void sendDocumentSync(not_null<Main::Session*> session,
 	crl::on_main([=, lst = std::move(group.list), caption = std::move(caption)]() mutable
 	{
 		auto size = lst.files.size();
-		session->api().sendFiles(std::move(lst), type, std::move(caption), size > 1 ? groupId : nullptr, action);
+		if (!lst.files.empty()) {
+			lst.files.front().caption = std::move(caption);
+		}
+		session->api().sendFiles(
+			std::move(lst),
+			type,
+			size > 1 ? groupId : nullptr,
+			action);
 	});
 
 	waitForMsgSync(session, action);
 }
 
 void sendStickerSync(not_null<Main::Session*> session,
-					 Api::MessageToSend &message,
+					 Api::MessageToSend &&message,
 					 not_null<DocumentData*> document) {
-	auto &action = message.action;
-	crl::on_main([&]
+	const auto action = message.action;
+	crl::on_main([=, message = std::move(message)]() mutable
 	{
 		Api::SendExistingDocument(std::move(message), document, std::nullopt);
 	});

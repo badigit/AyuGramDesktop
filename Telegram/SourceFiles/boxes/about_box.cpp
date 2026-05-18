@@ -41,7 +41,7 @@ rpl::producer<TextWithEntities> Text() {
 		lt_gpl_link,
 		rpl::single(Ui::Text::Link(
 			"GNU GPL",
-			"https://github.com/AyuGram/AyuGramDesktop/blob/master/LICENSE")),
+			"https://github.com/AyuGram/AyuGramDesktop/blob/dev/LICENSE")),
 		lt_github_link,
 		rpl::single(Ui::Text::Link(
 			"GitHub",
@@ -169,7 +169,7 @@ void ArchiveHintBox(
 							Ui::Text::IconEmoji(&st::textMoreIconEmoji)),
 						tr::rich
 					) | rpl::map([](TextWithEntities text) {
-						return Ui::Text::Link(std::move(text), 1);
+						return tr::link(std::move(text), 1);
 					}),
 					tr::rich),
 				st::channelEarnHistoryRecipientLabel));
@@ -254,8 +254,6 @@ void ArchiveHintBox(
 			box,
 			tr::lng_archive_hint_button(),
 			st::defaultActiveButton);
-		button->setTextTransform(
-			Ui::RoundButton::TextTransform::NoTransform);
 		button->resizeToWidth(box->width()
 			- st.buttonPadding.left()
 			- st.buttonPadding.left());

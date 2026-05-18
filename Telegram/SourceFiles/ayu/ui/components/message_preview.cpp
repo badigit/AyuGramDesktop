@@ -21,6 +21,7 @@
 #include "styles/style_settings.h"
 #include "ui/painter.h"
 #include "ui/chat/chat_style.h"
+#include "ui/chat/chat_style_radius.h"
 #include "ui/chat/chat_theme.h"
 #include "ui/effects/animations.h"
 #include "window/section_widget.h"
@@ -45,6 +46,7 @@ struct MessagePreview::State {
 	Ui::Animations::Simple heightAnimation;
 	std::unique_ptr<Ui::ChatTheme> theme;
 	int currentHeight = 0;
+	int bubbleRadius = 16;
 };
 
 MessagePreview::MessagePreview(
@@ -53,6 +55,7 @@ MessagePreview::MessagePreview(
 : RpWidget(parent)
 , _controller(controller)
 , _state(lifetime().make_state<State>()) {
+	_state->bubbleRadius = AyuSettings::getInstance().messageBubbleRadius();
 	_state->delegate = std::make_unique<PreviewDelegate>(
 		controller,
 		crl::guard(this, [=] { update(); }));
@@ -83,10 +86,11 @@ MessagePreview::MessagePreview(
 			.messageId = _state->reply->data()->fullId(),
 		},
 		.date = base::unixtime::now(),
-	}, TextWithEntities{ u"You need to touch some grass."_q },
+	}, TextWithEntities{ u"You need to go outside and touch some grass..."_q },
 	MTP_messageMediaEmpty());
 
 	messageItem->setDeleted();
+	messageItem->markDeletedAnimated();
 
 	_state->item = AdminLog::OwnedItem(
 		_state->delegate.get(),
@@ -95,7 +99,7 @@ MessagePreview::MessagePreview(
 	auto edition = HistoryMessageEdition();
 	edition.editDate = base::unixtime::now();
 	edition.textWithEntities = TextWithEntities{
-		u"You need to touch some grass."_q,
+		u"You need to go outside and touch some grass..."_q,
 	};
 	edition.useSameViews = true;
 	edition.useSameForwards = true;
@@ -162,7 +166,9 @@ void MessagePreview::paintEvent(QPaintEvent *e) {
 
 	const auto padding = st::settingsForwardPrivacyPadding;
 	p.translate(padding / 2, padding + view->marginBottom());
+	Ui::SetBubbleRadiusOverride(_state->bubbleRadius);
 	view->draw(p, context);
+	Ui::ClearBubbleRadiusOverride();
 
 	if (!AyuSettings::getInstance().hideFastShare()) {
 		const auto size = st::historyFastShareSize;
@@ -179,16 +185,18 @@ void MessagePreview::paintEvent(QPaintEvent *e) {
 		p.setPen(Qt::NoPen);
 		p.setBrush(context.st->msgServiceBg());
 		p.drawEllipse(shareRect);
-		p.save();
-		const auto center = shareRect.center();
-		p.translate(center);
-		p.scale(-1., 1.);
-		p.translate(-center);
 		context.st->historyFastShareIcon().paintInCenter(
 			p,
 			shareRect);
-		p.restore();
 	}
+}
+
+void MessagePreview::setBubbleRadius(int radius) {
+	if (_state->bubbleRadius == radius) {
+		return;
+	}
+	_state->bubbleRadius = radius;
+	refresh();
 }
 
 void MessagePreview::updateWidgetSize(int width, bool animate) {
