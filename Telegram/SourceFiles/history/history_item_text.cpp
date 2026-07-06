@@ -16,7 +16,16 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "ui/text/text_options.h"
 
+// AyuGram includes
+#include "api/api_transcribes.h"
+
+
 TextForMimeData HistoryItemText(not_null<HistoryItem*> item) {
+	const auto &summary = item->summaryEntry();
+	if (!summary.result.empty() && summary.shown) {
+		return TextForMimeData::WithExpandedLinks(summary.result);
+	}
+
 	const auto media = item->media();
 
 	auto mediaResult = media ? media->clipboardText() : TextForMimeData();

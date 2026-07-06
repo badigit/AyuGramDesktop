@@ -963,6 +963,12 @@ void AyuSettings::setQuickAdminShortcuts(bool val) {
 	save();
 }
 
+void AyuSettings::setDisableGreetingSticker(bool val) {
+	if (_disableGreetingSticker.current() == val) return;
+	_disableGreetingSticker = val;
+	save();
+}
+
 void AyuSettings::setShowPeerId(PeerIdDisplay val) {
 	if (_showPeerId.current() == val) return;
 	_showPeerId = val;
@@ -1070,6 +1076,7 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"disableAds", s._disableAds.current()},
 		{"disableStories", s._disableStories.current()},
 		{"disableCustomBackgrounds", s._disableCustomBackgrounds.current()},
+		{"hidePremiumStatuses", s._hidePremiumStatuses.current()},
 		{"showOnlyAddedEmojisAndStickers", s._showOnlyAddedEmojisAndStickers.current()},
 		{"collapseSimilarChannels", s._collapseSimilarChannels.current()},
 		{"hideSimilarChannels", s._hideSimilarChannels.current()},
@@ -1129,6 +1136,7 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"hideAllChatsFolder", s._hideAllChatsFolder.current()},
 		{"channelBottomButton", s._channelBottomButton.current()},
 		{"quickAdminShortcuts", s._quickAdminShortcuts.current()},
+		{"disableGreetingSticker", s._disableGreetingSticker.current()},
 		{"showPeerId", s._showPeerId.current()},
 		{"showMessageSeconds", s._showMessageSeconds.current()},
 		{"showMessageShot", s._showMessageShot.current()},
@@ -1170,6 +1178,7 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 	s._disableAds = j.value("disableAds", defaults._disableAds.current());
 	s._disableStories = j.value("disableStories", defaults._disableStories.current());
 	s._disableCustomBackgrounds = j.value("disableCustomBackgrounds", defaults._disableCustomBackgrounds.current());
+	s._hidePremiumStatuses = j.value("hidePremiumStatuses", defaults._hidePremiumStatuses.current());
 	s._showOnlyAddedEmojisAndStickers = j.value("showOnlyAddedEmojisAndStickers", defaults._showOnlyAddedEmojisAndStickers.current());
 	s._collapseSimilarChannels = j.value("collapseSimilarChannels", defaults._collapseSimilarChannels.current());
 	s._hideSimilarChannels = j.value("hideSimilarChannels", defaults._hideSimilarChannels.current());
@@ -1229,6 +1238,7 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 	s._hideAllChatsFolder = j.value("hideAllChatsFolder", defaults._hideAllChatsFolder.current());
 	s._channelBottomButton = j.value("channelBottomButton", defaults._channelBottomButton.current());
 	s._quickAdminShortcuts = j.value("quickAdminShortcuts", defaults._quickAdminShortcuts.current());
+	s._disableGreetingSticker = j.value("disableGreetingSticker", defaults._disableGreetingSticker.current());
 	s._showPeerId = j.value("showPeerId", defaults._showPeerId.current());
 	s._showMessageSeconds = j.value("showMessageSeconds", defaults._showMessageSeconds.current());
 	s._showMessageShot = j.value("showMessageShot", defaults._showMessageShot.current());
