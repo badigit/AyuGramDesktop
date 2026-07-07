@@ -68,7 +68,7 @@ jobs:
             '--productId', $productId,
             '--channelId', $channelId,
             '--add', 'Microsoft.VisualStudio.Component.VC.ATL',
-            '--quiet', '--norestart', '--wait'
+            '--quiet', '--norestart'
           )
           Write-Host "Running vs_installer.exe with args: $($argList -join ' | ')"
           $p = Start-Process -FilePath $installer -Wait -PassThru -ArgumentList $argList
