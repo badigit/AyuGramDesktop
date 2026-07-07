@@ -65,8 +65,6 @@ jobs:
           $argList = @(
             'modify',
             '--installPath', $installPath,
-            '--productId', $productId,
-            '--channelId', $channelId,
             '--add', 'Microsoft.VisualStudio.Component.VC.ATL',
             '--quiet', '--norestart'
           )
