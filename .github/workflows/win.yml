@@ -54,23 +54,26 @@ jobs:
         shell: pwsh
         run: |
           $installerDir = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
-          $installer = "$installerDir\vs_installer.exe"
           $vswhere = "$installerDir\vswhere.exe"
           $installPath = & $vswhere -latest -property installationPath
           $productId = & $vswhere -latest -property productId
-          $channelId = & $vswhere -latest -property channelId
           Write-Host "VS installation: $installPath"
-          Write-Host "productId: $productId, channelId: $channelId"
+          Write-Host "productId: $productId"
+
+          $sku = ($productId -split '\.')[-1].ToLower()
+          $bootstrapper = "$env:RUNNER_TEMP\vs_$sku.exe"
+          Write-Host "Downloading SKU-matched bootstrapper: vs_$sku.exe"
+          Invoke-WebRequest -Uri "https://aka.ms/vs/18/stable/vs_$sku.exe" -OutFile $bootstrapper
 
           $argList = @(
             'modify',
             '--installPath', $installPath,
             '--add', 'Microsoft.VisualStudio.Component.VC.ATL',
-            '--quiet', '--norestart'
+            '--quiet', '--wait', '--norestart', '--nocache'
           )
-          Write-Host "Running vs_installer.exe with args: $($argList -join ' | ')"
-          $p = Start-Process -FilePath $installer -Wait -PassThru -ArgumentList $argList
-          Write-Host "vs_installer exit code: $($p.ExitCode)"
+          Write-Host "Running vs_$sku.exe with args: $($argList -join ' | ')"
+          $p = Start-Process -FilePath $bootstrapper -Wait -PassThru -ArgumentList $argList
+          Write-Host "bootstrapper exit code: $($p.ExitCode)"
 
           if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
             Write-Host "=== Dumping bootstrapper logs ==="
@@ -82,7 +85,7 @@ jobs:
               Write-Host "--- $($_.FullName) ---"
               Get-Content $_.FullName -Tail 50
             }
-            Write-Error "vs_installer exited with code $($p.ExitCode)"
+            Write-Error "bootstrapper exited with code $($p.ExitCode)"
             exit $p.ExitCode
           }
           Write-Host "=== Verifying ATL headers ==="
