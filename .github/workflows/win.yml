@@ -50,6 +50,29 @@ jobs:
           git config --global user.email "you@example.com"
           git config --global user.name "Build"
 
+      - name: Install VC ATL component.
+        shell: pwsh
+        run: |
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
+          if (-not (Test-Path $installer)) {
+            $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          }
+          if (-not (Test-Path $installer)) {
+            Write-Error "VS installer not found"
+            exit 1
+          }
+          $installPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          Write-Host "Modifying VS installation at: $installPath"
+          $p = Start-Process -FilePath $installer -Wait -PassThru -ArgumentList `
+            'modify', `
+            '--installPath', "`"$installPath`"", `
+            '--add', 'Microsoft.VisualStudio.Component.VC.ATL', `
+            '--quiet', '--wait', '--norestart', '--nocache'
+          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
+            Write-Error "VS installer exited with code $($p.ExitCode)"
+            exit $p.ExitCode
+          }
+
       - uses: Eden-CI/msvc-dev-cmd@master
         name: Native Tools Command Prompt.
         with:
