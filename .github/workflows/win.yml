@@ -53,25 +53,32 @@ jobs:
       - name: Install VC ATL component.
         shell: pwsh
         run: |
-          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
-          if (-not (Test-Path $installer)) {
-            $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
-          }
-          if (-not (Test-Path $installer)) {
-            Write-Error "VS installer not found"
-            exit 1
-          }
-          $installPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
-          Write-Host "Modifying VS installation at: $installPath"
-          $p = Start-Process -FilePath $installer -Wait -PassThru -ArgumentList `
-            'modify', `
-            '--installPath', "`"$installPath`"", `
-            '--add', 'Microsoft.VisualStudio.Component.VC.ATL', `
-            '--quiet', '--wait', '--norestart', '--nocache'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installPath = & $vswhere -latest -property installationPath
+          Write-Host "Target VS installation: $installPath"
+
+          $bootstrapper = "$env:RUNNER_TEMP\vs_buildtools.exe"
+          Invoke-WebRequest -Uri "https://aka.ms/vs/18/stable/vs_buildtools.exe" -OutFile $bootstrapper
+
+          $argList = @(
+            'modify',
+            '--installPath', $installPath,
+            '--add', 'Microsoft.VisualStudio.Component.VC.ATL',
+            '--quiet', '--norestart', '--wait', '--nocache'
+          )
+          Write-Host "Running: $bootstrapper $($argList -join ' ')"
+          $p = Start-Process -FilePath $bootstrapper -Wait -PassThru -ArgumentList $argList
           if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
-            Write-Error "VS installer exited with code $($p.ExitCode)"
+            Write-Error "vs_buildtools exited with code $($p.ExitCode)"
             exit $p.ExitCode
           }
+          Write-Host "ATL install completed. Verifying atlbase.h exists:"
+          Get-ChildItem "$installPath\VC\Tools\MSVC" | Select-Object -First 1 | ForEach-Object {
+            $atlInclude = "$installPath\VC\Tools\MSVC\$($_.Name)\atlmfc\include\atlbase.h"
+            if (Test-Path $atlInclude) { Write-Host "OK: $atlInclude" } else { Write-Host "NOT FOUND: $atlInclude" }
+          }
+          $legacyAtl = "$installPath\VC\atlmfc\include\atlbase.h"
+          if (Test-Path $legacyAtl) { Write-Host "OK: $legacyAtl" } else { Write-Host "NOT FOUND: $legacyAtl" }
 
       - uses: Eden-CI/msvc-dev-cmd@master
         name: Native Tools Command Prompt.
