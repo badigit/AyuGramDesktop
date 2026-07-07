@@ -53,32 +53,47 @@ jobs:
       - name: Install VC ATL component.
         shell: pwsh
         run: |
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installerDir = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
+          $installer = "$installerDir\vs_installer.exe"
+          $vswhere = "$installerDir\vswhere.exe"
           $installPath = & $vswhere -latest -property installationPath
-          Write-Host "Target VS installation: $installPath"
-
-          $bootstrapper = "$env:RUNNER_TEMP\vs_buildtools.exe"
-          Invoke-WebRequest -Uri "https://aka.ms/vs/18/stable/vs_buildtools.exe" -OutFile $bootstrapper
+          $productId = & $vswhere -latest -property productId
+          $channelId = & $vswhere -latest -property channelId
+          Write-Host "VS installation: $installPath"
+          Write-Host "productId: $productId, channelId: $channelId"
 
           $argList = @(
             'modify',
             '--installPath', $installPath,
+            '--productId', $productId,
+            '--channelId', $channelId,
             '--add', 'Microsoft.VisualStudio.Component.VC.ATL',
-            '--quiet', '--norestart', '--wait', '--nocache'
+            '--quiet', '--norestart', '--wait'
           )
-          Write-Host "Running: $bootstrapper $($argList -join ' ')"
-          $p = Start-Process -FilePath $bootstrapper -Wait -PassThru -ArgumentList $argList
+          Write-Host "Running vs_installer.exe with args: $($argList -join ' | ')"
+          $p = Start-Process -FilePath $installer -Wait -PassThru -ArgumentList $argList
+          Write-Host "vs_installer exit code: $($p.ExitCode)"
+
           if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
-            Write-Error "vs_buildtools exited with code $($p.ExitCode)"
+            Write-Host "=== Dumping bootstrapper logs ==="
+            Get-ChildItem "$env:TEMP" -Filter "dd_*.log" -ErrorAction SilentlyContinue | ForEach-Object {
+              Write-Host "--- $($_.FullName) ---"
+              Get-Content $_.FullName -Tail 50
+            }
+            Get-ChildItem "$env:ProgramData\Microsoft\VisualStudio\Packages\_bootstrapper" -Filter "dd_*.log" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 3 | ForEach-Object {
+              Write-Host "--- $($_.FullName) ---"
+              Get-Content $_.FullName -Tail 50
+            }
+            Write-Error "vs_installer exited with code $($p.ExitCode)"
             exit $p.ExitCode
           }
-          Write-Host "ATL install completed. Verifying atlbase.h exists:"
-          Get-ChildItem "$installPath\VC\Tools\MSVC" | Select-Object -First 1 | ForEach-Object {
+          Write-Host "=== Verifying ATL headers ==="
+          Get-ChildItem "$installPath\VC\Tools\MSVC" -ErrorAction SilentlyContinue | ForEach-Object {
             $atlInclude = "$installPath\VC\Tools\MSVC\$($_.Name)\atlmfc\include\atlbase.h"
-            if (Test-Path $atlInclude) { Write-Host "OK: $atlInclude" } else { Write-Host "NOT FOUND: $atlInclude" }
+            if (Test-Path $atlInclude) { Write-Host "OK: $atlInclude" } else { Write-Host "MISSING: $atlInclude" }
           }
           $legacyAtl = "$installPath\VC\atlmfc\include\atlbase.h"
-          if (Test-Path $legacyAtl) { Write-Host "OK: $legacyAtl" } else { Write-Host "NOT FOUND: $legacyAtl" }
+          if (Test-Path $legacyAtl) { Write-Host "OK: $legacyAtl" } else { Write-Host "MISSING: $legacyAtl" }
 
       - uses: Eden-CI/msvc-dev-cmd@master
         name: Native Tools Command Prompt.
