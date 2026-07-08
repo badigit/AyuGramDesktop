@@ -60,6 +60,7 @@ include(cmake/external/qt/package.cmake)
 set(desktop_app_skip_libs
     glibmm
     variant
+    cmark_gfm
 )
 
 add_subdirectory(cmake)
