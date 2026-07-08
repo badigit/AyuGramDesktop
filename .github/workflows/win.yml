@@ -54,6 +54,7 @@ jobs:
         with:
           arch: x64
           sdk: ${{ env.SDK }}
+          toolset: '14.44'
 
       - name: NuGet sources.
         run: |
