@@ -4,6 +4,8 @@ This guide defines repository-wide instructions for coding agents working with t
 
 Avoid building the project.
 
+**Windows CI / сборка форка:** прежде чем трогать `.github/workflows/win.yml`, сабмодуль `cmake`, `Telegram/build/prepare/prepare.py` или пины сабмодулей — прочитай [docs/ci-windows-build.md](docs/ci-windows-build.md). Там рабочая когерентная связка (cmake `4088db229d` + zlib v1.3.1 + сабмодули = origin/dev + VS2026-дельты) и таблица «симптом → причина → фикс» по всем граблям (libvpx, breakpad/ATL, zlib/minizip, toolset 14.44, диск C→D, рассинхрон сабмодулей). Золотое правило: НЕ синхронизировать `prepare.py` целиком с upstream — брать связку из истории успешных сборок и добавлять только environment-дельты.
+
 If you're asked to create a Pull Request, then clearly state in PR description that it was AI generated.
 
 # Development Guidelines
