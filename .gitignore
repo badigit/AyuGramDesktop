@@ -73,3 +73,9 @@ settings.local.json
 
 # Project specific
 Telegram/SourceFiles/_other/packer_private.h
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
