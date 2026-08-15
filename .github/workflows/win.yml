@@ -2,6 +2,11 @@ name: Windows Build
 
 on:
   workflow_dispatch:
+    inputs:
+      only_cache:
+        description: 'Build libraries only, to warm the cache'
+        type: boolean
+        default: false
 
 jobs:
 
@@ -101,6 +106,7 @@ jobs:
         run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' ')' -type f ')' -o -empty ')' -delete
 
       - name: Telegram Desktop build.
+        if: inputs.only_cache != true
         run: |
           cd %TBUILD%\%REPO_NAME%\Telegram
 
@@ -114,9 +120,10 @@ jobs:
           -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF ^
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF
 
-          cmake --build ..\out --config Release --parallel
+          cmake --build ..\out --config Release --parallel 2
 
       - name: Move artifact.
+        if: inputs.only_cache != true
         run: |
           set OUT=%TBUILD%\%REPO_NAME%\out\Release
           mkdir artifact
@@ -124,6 +131,7 @@ jobs:
           move %OUT%\Updater.exe artifact\
 
       - name: Upload artifact.
+        if: inputs.only_cache != true
         uses: actions/upload-artifact@v7
         with:
           name: AyuGram-x64
