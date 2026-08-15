@@ -60,9 +60,6 @@ include(cmake/external/qt/package.cmake)
 set(desktop_app_skip_libs
     glibmm
     variant
-    cmark_gfm
-    microtex
-    tmc
 )
 
 add_subdirectory(cmake)
