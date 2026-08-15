@@ -107,6 +107,8 @@ jobs:
 
       - name: Telegram Desktop build.
         if: inputs.only_cache != true
+        env:
+          _CL_: /MP2
         run: |
           cd %TBUILD%\%REPO_NAME%\Telegram
 
