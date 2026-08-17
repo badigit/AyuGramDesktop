@@ -1878,6 +1878,9 @@ void Filler::fillHistoryActions() {
 	addToggleUnreadMark();
 	AyuUi::AddAyuGramActions(_peer, _thread, _controller, _addAction);
 	addCreateTopic();
+	if (_controller->windowId().primary()) {
+		addNewWindow(false);
+	}
 	addInfo();
 	AyuUi::AddJumpToBeginningAction(_peer, _thread, _controller, _addAction);
 	AyuUi::AddOpenChannelAction(_peer, _controller, _addAction);
