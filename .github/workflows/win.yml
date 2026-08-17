@@ -7,12 +7,19 @@ on:
         description: 'Build libraries only, to warm the cache'
         type: boolean
         default: false
+      publish_update:
+        description: 'Sign the build, publish a release and point the updater at it'
+        type: boolean
+        default: false
 
 jobs:
 
   windows:
     name: Windows x64
     runs-on: windows-latest
+
+    permissions:
+      contents: write
 
     env:
       PREPARE_PATH: "Telegram/build/prepare/prepare.py"
@@ -145,3 +152,72 @@ jobs:
         with:
           name: AyuGram-x64
           path: artifact\
+
+      - name: Read version.
+        if: inputs.only_cache != true && inputs.publish_update
+        shell: bash
+        run: |
+          set -eu
+          version="$TBUILD/$REPO_NAME/Telegram/build/version"
+          echo "AppVersion=$(awk '/^AppVersion /{print $2}' "$version")" >> $GITHUB_ENV
+          echo "AppVersionStr=$(awk '/^AppVersionStr /{print $2}' "$version")" >> $GITHUB_ENV
+
+      - name: Pack and sign update.
+        if: inputs.only_cache != true && inputs.publish_update
+        shell: bash
+        env:
+          PRIVATE_KEY: ${{ secrets.AYU_UPDATE_PRIVATE_KEY }}
+        run: |
+          set -eu
+          if [ -z "$PRIVATE_KEY" ]; then
+            echo "Secret AYU_UPDATE_PRIVATE_KEY is empty"
+            exit 1
+          fi
+          python -m pip install --quiet cryptography
+          printf '%s\n' "$PRIVATE_KEY" > "$RUNNER_TEMP/update-key.pem"
+          python "$TBUILD/$REPO_NAME/tools/ayu-update/pack.py" \
+            --version "$AppVersion" \
+            --key "$RUNNER_TEMP/update-key.pem" \
+            --source "$GITHUB_WORKSPACE/artifact" \
+            --out "$GITHUB_WORKSPACE/dist"
+          rm -f "$RUNNER_TEMP/update-key.pem"
+          python "$TBUILD/$REPO_NAME/tools/ayu-update/verify.py" \
+            "$GITHUB_WORKSPACE/dist/tx64upd$AppVersion" \
+            --expect-version "$AppVersion"
+
+      - name: Publish release.
+        if: inputs.only_cache != true && inputs.publish_update
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          tag="v$AppVersionStr"
+          asset="$GITHUB_WORKSPACE/dist/tx64upd$AppVersion"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" "$asset" --repo "$GITHUB_REPOSITORY" \
+              --title "$AppVersionStr" \
+              --notes "Windows x64 update package for the fork's own updater."
+          fi
+
+      - name: Update current4 on Pages.
+        if: inputs.only_cache != true && inputs.publish_update
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/v$AppVersionStr/tx64upd$AppVersion"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          rm -rf "$RUNNER_TEMP/pages"
+          git clone --depth 1 --branch gh-pages \
+            "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" \
+            "$RUNNER_TEMP/pages"
+          printf '%s:%s\n' "$AppVersion" "$url" > "$RUNNER_TEMP/pages/current4"
+          cd "$RUNNER_TEMP/pages"
+          git add current4
+          git commit -m "update to $AppVersionStr"
+          git push

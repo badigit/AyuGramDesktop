@@ -1,3 +1,8 @@
+7.0.10 (17.08.26)
+
+- Add "Open in new window" to the chat top bar menu.
+- Switch autoupdate to the fork's own signed update server.
+
 7.0.9 (05.08.26)
 
 - Add saving rich messages to HTML and importing them back.
