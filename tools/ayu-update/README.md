@@ -1,53 +1,60 @@
-# Своё автообновление форка
+# The fork's own autoupdate
 
-Форк обновляется со своего сервера своими подписанными пакетами, а не с
-`update.ayugram.one`. Здесь лежат упаковщик и проверяльщик пакетов.
+This fork updates from its own server with its own signed packages instead of
+`update.ayugram.one`. The packer and the verifier live here.
 
-## Как это устроено
+## How it works
 
-Клиент на Windows раз в несколько часов дёргает `<prefix>/current4`
-(`core/update_checker.cpp`, `HttpChecker::start`). Префикс задан в
-`storage/localstorage.cpp`, `readAutoupdatePrefixRaw()`.
+On Windows the client polls `<prefix>/current4` (`core/update_checker.cpp`,
+`HttpChecker::start`). The prefix is set in `storage/localstorage.cpp`,
+`readAutoupdatePrefixRaw()`.
 
-Ответ — одна строка старого формата, ссылка берётся абсолютной:
+The response is a single line in the old format, and the link is taken as an
+absolute URL:
 
 ```
 7000010:https://github.com/badigit/AyuGramDesktop/releases/download/v7.0.10/tx64upd7000010
 ```
 
-Клиент обновится, только если число слева строго больше его `AppVersion`
-(`core/version.h`). Имя файла в конце ссылки обязано подходить под regexp
-`FindUpdateFile` — для x64 это `tx64upd<число>`.
+The client updates only when the number on the left is strictly greater than its
+own `AppVersion` (`core/version.h`). The file name at the end of the link must
+match the `FindUpdateFile` regexp — for x64 that means `tx64upd<number>`.
 
-Скачанный пакет проверяется подписью по `UpdatesPublicKey` из
-`SourceFiles/config.h`. Приватная половина этой пары лежит вне репозитория
-(см. ниже). Битый или чужой пакет клиент отвергает молча и пробует позже —
-сломать установленный клиент кривым пакетом нельзя.
+The downloaded package is checked against `UpdatesPublicKey` from
+`SourceFiles/config.h`. The private half of that pair lives outside the
+repository (see below). A broken or foreign package is rejected silently and
+retried later, so a bad package cannot break an installed client.
 
-Раздача разнесена: маленький `current4` отдаёт GitHub Pages (ветка `gh-pages`),
-сам пакет — ассет GitHub Releases, чтобы не упираться в лимит Pages на размер
-файла.
+Hosting is split: the tiny `current4` is served by GitHub Pages (branch
+`gh-pages`), while the package itself is a GitHub Releases asset, which keeps it
+clear of the Pages file size limit.
 
-## Ключ подписи
+## The signing key
 
-RSA ровно 1024 бита — клиент требует `RSA_size == 128` и другой размер не
-примет. Публичная половина зашита в `SourceFiles/config.h`, поэтому смена ключа
-требует пересборки клиента и ручной установки этой сборки: обновиться на неё
-по воздуху уже нельзя.
+RSA, exactly 1024 bit — the client requires `RSA_size == 128` and rejects any
+other size. The public half is baked into `SourceFiles/config.h`, so replacing
+the key requires rebuilding the client and installing that build by hand: an
+existing client cannot update onto it over the air.
 
-Приватный ключ хранится в секрете репозитория `AYU_UPDATE_PRIVATE_KEY` и в
-менеджере паролей. Потеря ключа означает, что выпускать обновления для уже
-установленных клиентов больше нечем.
+The private key is stored in the `AYU_UPDATE_PRIVATE_KEY` repository secret and
+in a password manager. Losing it means there is no way left to ship updates to
+already installed clients.
 
-## Выпуск релиза
+## Cutting a release
 
-1. Поднять версию: `python Telegram/build/set_version.py 7.0.11` — перед этим
-   добавить запись в `changelog.txt`, иначе скрипт откажется работать.
-2. Собрать: `gh workflow run win.yml --repo badigit/AyuGramDesktop --ref mods`.
-3. Дальше всё делает workflow: собирает пакет, подписывает ключом из секрета,
-   создаёт релиз с ассетом `tx64upd<version>` и обновляет `current4`.
+1. Add an entry to `changelog.txt`, then bump the version:
+   `python Telegram/build/set_version.py 7.0.11`. The script refuses to run
+   without a matching changelog entry.
+2. Build and publish:
+   `gh workflow run win.yml --repo badigit/AyuGramDesktop --ref mods -f publish_update=true`.
+3. The workflow does the rest: builds the package, signs it with the key from
+   the secret, verifies it, creates the release with the `tx64upd<version>`
+   asset and rewrites `current4`.
 
-## Ручная сборка пакета
+Without `publish_update` the workflow only builds and uploads the artifact, the
+way it did before.
+
+## Building a package by hand
 
 ```bash
 python tools/ayu-update/pack.py \
@@ -57,13 +64,14 @@ python tools/ayu-update/pack.py \
   --out dist
 ```
 
-Проверить перед публикацией — тем же ключом, что зашит в клиент:
+Verify before publishing, against the same key the client carries:
 
 ```bash
 python tools/ayu-update/verify.py dist/tx64upd7000010 --expect-version 7000010
 ```
 
-`verify.py` повторяет шаги клиента в том же порядке: SHA1, подпись, распаковка,
-разбор списка файлов. Если он молчит про ошибки — клиент пакет примет.
+`verify.py` repeats the client's own steps in the same order: SHA1, signature,
+decompression, file list. If it reports no errors, the client will accept the
+package.
 
-Нужен Python с пакетом `cryptography`.
+Both scripts need Python with the `cryptography` package.
