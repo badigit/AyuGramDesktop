@@ -198,6 +198,7 @@ jobs:
             gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create "$tag" "$asset" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
               --title "$AppVersionStr" \
               --notes "Windows x64 update package for the fork's own updater."
           fi
@@ -219,5 +220,9 @@ jobs:
           printf '%s:%s\n' "$AppVersion" "$url" > "$RUNNER_TEMP/pages/current4"
           cd "$RUNNER_TEMP/pages"
           git add current4
-          git commit -m "update to $AppVersionStr"
-          git push
+          if git diff --cached --quiet; then
+            echo "current4 already points at this build"
+          else
+            git commit -m "update to $AppVersionStr"
+            git push
+          fi

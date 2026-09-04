@@ -75,3 +75,19 @@ decompression, file list. If it reports no errors, the client will accept the
 package.
 
 Both scripts need Python with the `cryptography` package.
+
+## Rehearsing the publishing steps
+
+The three publishing steps of `.github/workflows/win.yml` only ever run on a
+real release, so a mistake in them costs a release. `test_publish_steps.py`
+takes those very snippets out of the workflow file and runs them locally
+against a throwaway key, a stub `gh` and a local bare repository standing in
+for `gh-pages`:
+
+```bash
+python tools/ayu-update/test_publish_steps.py
+```
+
+It talks to nothing outside its temporary directory and covers the first
+publish of a version, a rerun of the same version and a bump to the next one.
+Run it after editing any of those steps.
