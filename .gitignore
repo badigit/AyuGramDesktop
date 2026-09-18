@@ -88,3 +88,8 @@ Telegram/SourceFiles/_other/packer_private.h
 /_ayu_build/
 /_upstream_win.yml
 Telegram/build/prepare/__pycache__/
+
+# Зависимость, склонированная руками: в .gitmodules её нет, хотя остальные
+# Telegram/ThirdParty/* там подмодулями. 3.4 МБ, лежит с 01.04.2026. Не удаляю —
+# каталог сборки может на неё ссылаться; но и в дерево она не просится.
+Telegram/ThirdParty/dispatch/
