@@ -81,3 +81,10 @@ Telegram/SourceFiles/_other/packer_private.h
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Каталог локальной сборки форка (722 МБ) и кэш питоновских скриптов сборки —
+# машинный вывод, а не исходники. Без этих строк git status в форке вечно
+# грязный, и на их фоне не видно собственных правок ветки mods.
+/_ayu_build/
+/_upstream_win.yml
+Telegram/build/prepare/__pycache__/
