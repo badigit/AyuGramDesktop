@@ -1,6 +1,8 @@
 name: Windows Build
 
 on:
+  push:
+    branches: [sync/upstream-7.2.9]
   workflow_dispatch:
     inputs:
       only_cache:
