@@ -1,3 +1,5 @@
+> Historical note: this guide records the successful v7.0.9 Windows build. Since the 7.2.9 upstream sync, dependency pins, Qt and CMake prerequisites must be validated afresh. Do not apply old pinned hashes automatically.
+
 # Windows CI Build — рабочая связка и грабли (форк `mods`)
 
 Памятка для агентов по Windows-сборке форка (`badigit/AyuGramDesktop`, ветка `mods`,

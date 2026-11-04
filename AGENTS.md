@@ -1,33 +1,12 @@
-# Agent Guide for Telegram Desktop
+# Agent Guide for AyuGram Desktop
 
-This guide defines repository-wide instructions for coding agents working with the Telegram Desktop codebase.
+This guide defines repository-wide instructions for coding agents working with the AyuGram Desktop (Telegram Desktop fork) codebase.
 
-Avoid building the project.
+Avoid building the project unless explicitly requested to validate a dedicated CI branch.
 
-**Windows CI / сборка форка:** прежде чем трогать `.github/workflows/win.yml`, сабмодуль `cmake`, `Telegram/build/prepare/prepare.py` или пины сабмодулей — прочитай [docs/ci-windows-build.md](docs/ci-windows-build.md). Там актуальная когерентная связка (build-стек берётся целиком из origin/dev: cmake `f79a0e6acd`, zlib `e3dc0a85b`, patches `a17d54b6`), наши environment-дельты под раннер (pagefile, `windows-latest`, toolset 14.44, `_CL_=/MP2`, TBuild на диске workspace, режим `only_cache`) и таблица «симптом → причина → фикс». Золотые правила: не синхронизировать `prepare.py` выборочно с upstream и после мержа свежего origin/dev снимать старые пины-костыли.
+**Fork Windows CI:** Before changing `.github/workflows/win.yml`, CMake, `prepare.py` or submodules, read `docs/ci-windows-build.md`. Historical build pins from v7.0.9 must NOT be blindly reused after the upstream v7.2.9 sync. Keep the fork's update signing key and GitHub Pages feed intact.
 
 If you're asked to create a Pull Request, then clearly state in PR description that it was AI generated.
-
-## Working from Codex on Windows + WSL
-
-This checkout may be opened in Codex Desktop through the Windows UNC path `\\wsl.localhost\{distro}\home\{user}\Telegram\tdesktop`, while the real Linux path is `/home/{user}/Telegram/tdesktop`. Treat it as a WSL/Linux checkout first, not as a native Windows checkout.
-
-- Prefer running repository-aware commands through WSL:
-
-```powershell
-wsl.exe -d {distro} --cd /home/{user}/Telegram/tdesktop -- <command>
-```
-
-- PowerShell can read and write files through the UNC path, but native Windows tools may see different ownership, path, executable, or line-ending behavior than Linux tools.
-- Git from PowerShell over `\\wsl.localhost\...` can fail with `detected dubious ownership`. Use WSL Git instead. Do not change global Git `safe.directory` settings unless the user explicitly asks for that.
-- Keep path styles matched to the shell. Use `/home/{user}/Telegram/tdesktop/...` with WSL commands, and quoted `\\wsl.localhost\{distro}\home\{user}\Telegram\tdesktop\...` paths with native Windows commands. Avoid passing UNC paths to Linux tools or Linux paths to native Windows tools unless the tool explicitly supports them.
-- If a command behaves strangely from the PowerShell UNC working directory, retry the same command through `wsl.exe -d {distro} --cd /home/{user}/Telegram/tdesktop -- ...` before concluding the repository or command is broken.
-- Recursive searches and repo inspection are usually faster and more faithful through WSL, for example `wsl.exe -d {distro} --cd /home/{user}/Telegram/tdesktop -- rg ...`.
-- Do not assume the WSL host has the build toolchain installed directly. In this setup, WSL may not have `cmake`, while Windows may have `cmake`, and the configured `out/` tree may still target the Linux Docker toolchain. Do not run native Windows `cmake --build out` against a Linux/Docker build tree.
-- For WSL/Linux builds, use the Docker build entry point from the repository root: `Telegram/build/docker/centos_env/build_debug.sh`. The Docker daemon must be reachable from WSL; checking `docker info` is fine, but do not start a build unless the user asked for one.
-- Existing build outputs may be Linux binaries, for example `out/Debug/Telegram` as an ELF executable, not `Telegram.exe`. Verify the build tree before assuming which platform produced it.
-- Be careful with text file line endings. In a WSL/Linux checkout, files should remain LF-only unless the file already uses another convention. CRLF finishing applies only to native, non-WSL Windows runs/checkouts. Do not let PowerShell or Windows tools silently rewrite WSL files to CRLF. If a file becomes mixed, normalize it back to the convention appropriate for the current checkout, without adding a UTF-8 BOM.
-- When using the local `perform-task` skill from this WSL checkout, keep external AI task artifacts and edited project text files LF-only. Treat its Windows text-normalization phase as not applicable to WSL, except to record that line endings were checked and kept LF/no-BOM. Run CRLF normalization only in a native, non-WSL Windows checkout.
 
 ## Build System Structure
 
@@ -81,7 +60,19 @@ cmake --build "l:\Telegram\tx64\out" --config Debug --target Telegram
 ### macOS
 - Requires Xcode
 - Dependencies: `../Libraries/local/Qt-*`
-- Set `QT` environment variable: `export QT=6.8`
+- First-time configure of a new `out/` tree: set the `QT` environment variable
+  to the Qt version this checkout actually has, for example `export QT=6.11.1`
+  when `../Libraries/local/Qt-6.11.1` is the installed one. The value names a
+  directory, so it is the checkout's version, not a constant.
+- Reconfiguring an existing `out/` tree: do **not** export `QT`. Run
+  `env -u QT cmake -S . -B out` instead. `cmake/external/qt/package.cmake`
+  writes an exported `QT` into the `qt_requested` cache entry with `FORCE`, so
+  it overwrites the version the tree was already configured with instead of
+  being ignored. A value that disagrees with the configured tree then fails the
+  regeneration, and the generated project keeps the source list it was last
+  generated with: newly added sources are never compiled — which surfaces later
+  as undefined-symbol link errors rather than as a configure error — and newly
+  added `.style` modules leave the generated `style_*.h` includes stale.
 
 ### Linux
 - Build dependencies in `../Libraries`
@@ -114,8 +105,8 @@ older `kKeysCount`. The characteristic failure is:
   `Lang::Instance::applyValue()`, `fillFromSerialized()`, and
   `Local::readLangPack()`.
 
-If this exact startup failure repeats twice, do not change the implementation,
-test overlay, or portable account. Stop only this checkout's exact Telegram
+If this exact startup failure repeats twice, do not change the implementation
+or portable account. Stop only this checkout's exact Telegram
 process. Because Xcode's `CONFIGURATION_BUILD_DIR` is `out/Debug`, make a
 safety copy of every existing portable folder outside `out/` before cleaning:
 
@@ -149,16 +140,7 @@ diagnosis or report the blocker. Do not loop clean rebuilds.
 
 ### Build output locks
 
-For builds owned by the autonomous `continue` / `perform-task` workflow, read
-and follow `.agents/shared/build-lock-recovery.md`. PDB, EXE, OBJ, and other
-build-output lock errors are recoverable: stop only the exact checkout
-executable or verified build-tree holders, delete only exact named artifacts
-inside that checkout's build tree, and retry within the bounded recovery
-budget. Never stop an installed Telegram client, another checkout, an IDE, or
-an unknown process.
-
-Outside that autonomous workflow, an exact checkout executable may be running
-because the user is testing it. Do not terminate it or delete locked build
+An exact checkout executable may be running because the user is testing it. Do not terminate it or delete locked build
 outputs without explicit permission. Report the exact locked path and ask the
 user to close that checkout's Telegram/debugger before rebuilding.
 
@@ -166,6 +148,24 @@ user to close that checkout's Telegram/debugger before rebuilding.
 
 1. **Always use Debug builds** - Release builds are extremely heavy
 2. **Don't build Release configuration** - it's too heavy for testing
+
+## Debug-Only Code
+
+Production translation units stay free of debug machinery. The permanent test
+harness lives in `Telegram/SourceFiles/test/`; production code carries at most
+a thin single-call seam (a `Test::Fire()`-style waitpoint or a live-object
+publication at a construction seam).
+
+- Do not add `#ifdef _DEBUG` blocks, debug-only types, debug state, mutexes,
+  counters, or observation structs to production headers or sources. When a
+  behavior cannot be observed without such machinery, that is a harness gap:
+  extend the `test/` helpers instead.
+- Never commit debugging machinery interleaved with working code in the same
+  translation unit. A permanent helper belongs under `test/`; a temporary one
+  is never retained.
+- Exceptions exist — a few `#ifdef _DEBUG` hooks are deliberately kept in
+  production files — but they are exceptions and each new one needs a solid,
+  stated reason. "The test needed it" is not one.
 
 ## Text File Format
 
@@ -176,21 +176,8 @@ user to close that checkout's Telegram/debugger before rebuilding.
 ## Commits
 
 - Subject: one concise, plain-language line summarizing the change, ~50-60 characters, matching the style of recent `git log` subjects. This is usually the entire message.
-- For an `ai-tdesktop` task, start the subject with exactly `[ai] ` when the
-  retained task implementation changes permanent test-helper code, the agent
-  harness, or agent documentation in any way. This includes
-  `Telegram/SourceFiles/test/`, `.agents/`, `.claude/`, `AGENTS.md`,
-  `CLAUDE.md`, and files whose sole role is supporting those systems. Do not
-  count the disposable test overlay or external AI task artifacts. For every
-  other task, the subject must not contain `[ai]` anywhere.
-- For ordinary work not associated with an AI task, add a short plain-language body only when the subject can't carry it (what was done, not the technical how) — a line or two at most.
+- Add a short plain-language body only when the subject can't carry it (what was done, not the technical how) — a line or two at most.
 - Never add a `Co-Authored-By:` line or any tool/assistant attribution trailer.
-- Never add `Autotask:`/attempt or other internal run markers. A commit owned by
-  an `ai-tdesktop` task has exactly three lines: the concise subject, a blank
-  line, and `Task: <task-id>`. Do not add a body. Keep rationale and
-  implementation notes out of the commit message; put a short durable note
-  under `tasks/<task-id>.md` only when useful. Do not copy commit hashes into
-  that note or any AI task artifact; the task id is the cross-repository link.
 
 ## Local Storage Serialization
 
@@ -207,9 +194,11 @@ Both app-level (`Core::Settings`) and session-level (`Main::SessionSettings`) us
 
 ## Coding Style
 
-**Do NOT write comments in code:**
+**Comments are rationed:**
 
-This is important! Do not write single-line comments that describe what the next line does - they are bloat. Comments are allowed ONLY to describe complex algorithms in detail, when the explanation requires at least 4-5 lines. Self-documenting code with clear variable and function names is preferred.
+A comment is one line; two or three only when the block opens with `// WHY:`. A commit may add two comment lines plus one such exception, and a trailing comment is a line too; only `} // namespace X` closers and `#endif // X` labels are free. Say why, never what. Hooks enforce it, and `Telegram/SourceFiles/test/` is exempt.
+
+Do not remove existing comments just to satisfy this rule. Preserve comments unless your change makes them incorrect or truly obsolete; when moving or refactoring code, move the useful comment with it. Inline comments that label positional arguments for generated or schema-driven APIs (for example TL/MTP constructors) are useful because the field names are not visible in the call itself.
 
 ```cpp
 // BAD - don't do this:
@@ -222,15 +211,41 @@ if (user->isPremium()) {
 auto name = user->name();
 if (user->isPremium()) {
 
-// ACCEPTABLE - complex algorithm explanation (4+ lines):
-// The algorithm works by first collecting all visible messages
-// in the viewport, then calculating their intersection with
-// the clip rectangle. Messages are grouped by date headers,
-// and we need to account for sticky headers that may overlap
-// with the first message in each group.
+// ACCEPTABLE - one line, and it carries a reason:
+_limit = kDefaultLimit; // the server rejects anything larger
+
+// ACCEPTABLE - the exception: opens with WHY, three lines at most,
+// once per commit.
+// WHY: the server sends the id before the peer exists, so the row is
+// created empty and filled on the next update, or the list flickers
+// on every reconnect.
+```
+
+**AyuGram includes in upstream files:**
+
+When an upstream (Telegram Desktop) file needs an extra include for AyuGram
+code, never mix it into the upstream include list. Put all such includes in a
+separate block after the last upstream include, headed by `// AyuGram includes`,
+with one empty line before the marker and two empty lines after the block.
+If the file already has this block, append to it instead of creating another.
+Files under `Telegram/SourceFiles/ayu/` don't need the marker.
+
+```cpp
+#include "storage/file_upload.h"
+#include "storage/storage_account.h"
+
+// AyuGram includes
+#include "ayu/ayu_settings.h"
+#include "ayu/utils/telegram_helpers.h"
+#include "window/window_controller.h"
+
+
+namespace {
 ```
 
 **Style and formatting rules** are in `REVIEW.md` — see that file for empty-line-before-closing-brace, operator placement in multi-line expressions, if-with-initializer, and other mechanical style rules.
+
+**Never discard a result with a cast:** `static_cast<void>(...)` and `(void)expr` are banned; instead of silencing `[[nodiscard]]`, fix the design.
 
 **Use `auto` for type deduction:**
 
@@ -754,8 +769,6 @@ The `Error` template parameter defaults to `rpl::no_error`: `rpl::producer<Type,
 - Pass `rpl::lifetime` to `on_...` methods or store returned lifetime
 - Use `rpl::duplicate(producer)` to reuse a producer multiple times
 - Combined producers automatically unpack tuples in lambdas (works with `rpl::map`, `rpl::filter`, and `rpl::on_next`)
-
-<!-- bd-doctor-divergence: ok -->
 
 <!-- BEGIN BEADS PROJECT: generated by workshop beads-docs-check.py -->
 ## Beads
